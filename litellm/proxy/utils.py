@@ -5474,7 +5474,7 @@ def _strip_null_bytes_from_value(v: object) -> object:
     return v
 
 
-def _strip_null_bytes(payload: Dict[str, object]) -> Dict[str, object]:
+def _strip_null_bytes(payload: dict[str, object]) -> dict[str, object]:
     return {k: _strip_null_bytes_from_value(v) for k, v in payload.items()}
 
 
