@@ -104,6 +104,24 @@ const interactiveOAuthServer = {
   mcp_access_groups: [],
 };
 
+async function selectAntOption(labelText: string, optionText: string) {
+  const label = screen.getByText(labelText);
+  const select = label.closest(".ant-form-item")?.querySelector(".ant-select");
+  act(() => {
+    fireEvent.mouseDown(select!.querySelector(".ant-select-selector")!);
+  });
+  await waitFor(() => {
+    expect(document.querySelectorAll(".ant-select-item-option").length).toBeGreaterThan(0);
+  });
+  const option = Array.from(document.querySelectorAll(".ant-select-item-option")).find((el) =>
+    el.textContent?.includes(optionText),
+  );
+  expect(option).toBeTruthy();
+  act(() => {
+    fireEvent.click(option!);
+  });
+}
+
 // ── test suites ───────────────────────────────────────────────────────────────
 
 describe("MCPServerEdit (stdio)", () => {
@@ -504,6 +522,38 @@ describe("MCPServerEdit (interactive OAuth)", () => {
 
     const [, payload] = vi.mocked(networking.updateMCPServer).mock.calls[0];
     expect(payload.token_validation).toEqual({ organization: "my-org" });
+  });
+
+  it("includes credentials.token_endpoint_auth_method in update payload when client_secret_basic is selected", async () => {
+    vi.mocked(networking.updateMCPServer).mockResolvedValue(interactiveOAuthServer);
+
+    render(
+      <MCPServerEdit
+        mcpServer={interactiveOAuthServer}
+        accessToken="access-token"
+        onCancel={vi.fn()}
+        onSuccess={vi.fn()}
+        availableAccessGroups={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Token Endpoint Auth Method (optional)")).toBeInTheDocument();
+    });
+
+    await selectAntOption("Token Endpoint Auth Method (optional)", "Client Secret Basic");
+
+    const saveButtons = screen.getAllByRole("button", { name: "Save Changes" });
+    await act(async () => {
+      fireEvent.click(saveButtons[0]);
+    });
+
+    await waitFor(() => {
+      expect(networking.updateMCPServer).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = vi.mocked(networking.updateMCPServer).mock.calls[0];
+    expect(payload.credentials?.token_endpoint_auth_method).toBe("client_secret_basic");
   });
 
   it("does not include token_validation in payload when field is empty and server had none", async () => {
