@@ -5193,7 +5193,9 @@ class ProxyUpdateSpend:
                     else:
                         for j in range(0, len(logs_to_process), BATCH_SIZE):
                             batch = logs_to_process[j : j + BATCH_SIZE]
-                            batch_with_dates = [prisma_client.jsonify_object({**entry}) for entry in batch]
+                            batch_with_dates = [
+                                prisma_client.jsonify_object(_strip_null_bytes(entry)) for entry in batch
+                            ]
                             await SpendLogsRepository(prisma_client).table.create_many(
                                 data=batch_with_dates, skip_duplicates=True
                             )
@@ -5460,6 +5462,18 @@ async def _monitor_spend_logs_queue(
             # Continue monitoring even if there's an error, with exponential backoff
             current_interval = min(current_interval * backoff_multiplier, max_backoff)
             await asyncio.sleep(current_interval)
+
+
+def _strip_null_bytes(value: object) -> object:
+    match value:
+        case str():
+            return value.replace("\x00", "")
+        case dict():
+            return {k: _strip_null_bytes(v) for k, v in value.items()}
+        case list():
+            return [_strip_null_bytes(item) for item in value]
+        case _:
+            return value
 
 
 def _raise_failed_update_spend_exception(e: Exception, start_time: float, proxy_logging_obj: ProxyLogging):
