@@ -278,6 +278,22 @@ _BANNED_REQUEST_BODY_PARAMS: Tuple[str, ...] = (
     "s3_endpoint_url",
     "sagemaker_base_url",
     "deployment_url",
+    # NVIDIA Riva NVCF function selector. The transcription handler
+    # attaches a caller-supplied value as the gRPC ``function-id``
+    # metadata while still authenticating with the admin's ``nvapi-*``
+    # bearer, so a caller can pivot the deployment's admin-pinned
+    # function to any other NVCF function reachable with that key
+    # (cost-shift / access to unsanctioned deployments). Same shape as
+    # ``aws_bedrock_project_id``.
+    "nvcf_function_id",
+    # NVIDIA Riva TLS toggle. ``use_ssl`` flows from the request body
+    # into ``optional_params`` and gates whether the handler builds a
+    # plaintext or TLS gRPC channel. A caller-supplied ``use_ssl=false``
+    # downgrades the channel that carries the admin's ``nvapi-*`` bearer
+    # (attached as ``authorization`` gRPC metadata), exposing the token
+    # to an on-path observer for any pinned endpoint that also accepts
+    # cleartext.
+    "use_ssl",
     # SDK-only field; also rejected outright in is_request_body_safe.
     "model_list",
     # Observability credentials, hosts, and project identifiers: derived

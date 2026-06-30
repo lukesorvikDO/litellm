@@ -1520,6 +1520,24 @@ class TestGetDynamicLitellmParamsClearsAdminConfigOnBaseOverride:
         assert "vertex_credentials" not in out
         assert "vertex_project" not in out
 
+    def test_clears_nvcf_function_id_on_base_override(self):
+        from litellm.router_utils.clientside_credential_handler import (
+            get_dynamic_litellm_params,
+        )
+
+        admin_params = {
+            "model": "nvidia_riva/parakeet",
+            "api_base": "grpc.nvcf.nvidia.com:443",
+            "api_key": "nvapi-admin",
+            "nvcf_function_id": "admin-pinned-function",
+        }
+        out = get_dynamic_litellm_params(
+            litellm_params=dict(admin_params),
+            request_kwargs={"api_base": "self-hosted.example.com:50051"},
+        )
+        assert out["api_base"] == "self-hosted.example.com:50051"
+        assert "nvcf_function_id" not in out
+
     def test_caller_resupplied_value_overrides_admin_value_on_base_override(self):
         # When the caller redirects ``api_base`` and *also* supplies their
         # own value for one of the admin fields (e.g. ``organization``),
@@ -1712,6 +1730,89 @@ class TestIsRequestBodySafeBlocksBedrockProjectOverride:
         )
 
 
+class TestIsRequestBodySafeBlocksNVCFFunctionOverride:
+    """``nvcf_function_id`` is the NVIDIA Riva audio-transcription handler's
+    selector for which NVCF function the gRPC stream targets — attached as
+    the ``function-id`` metadata while the proxy authenticates with the
+    admin's ``nvapi-*`` bearer. A caller-supplied value pivots the
+    deployment's admin-pinned function to any other NVCF function reachable
+    with that key (cost-shift / access to unsanctioned deployments).
+    VERIA-493."""
+
+    def test_nvcf_function_id_in_request_body_is_rejected(self):
+        with pytest.raises(ValueError, match="nvcf_function_id"):
+            is_request_body_safe(
+                request_body={
+                    "model": "nvidia_riva/parakeet",
+                    "nvcf_function_id": "attacker-pinned-function",
+                },
+                general_settings={},
+                llm_router=None,
+                model="nvidia_riva/parakeet",
+            )
+
+    def test_nvcf_function_id_with_api_key_still_rejected(self):
+        with pytest.raises(ValueError, match="nvcf_function_id"):
+            is_request_body_safe(
+                request_body={
+                    "model": "nvidia_riva/parakeet",
+                    "api_key": "sk-anything",
+                    "nvcf_function_id": "attacker-pinned-function",
+                },
+                general_settings={},
+                llm_router=None,
+                model="nvidia_riva/parakeet",
+            )
+
+    def test_admin_opt_in_proxy_wide_allows_nvcf_function_id(self):
+        assert (
+            is_request_body_safe(
+                request_body={
+                    "model": "nvidia_riva/parakeet",
+                    "nvcf_function_id": "byok-function-id",
+                },
+                general_settings={"allow_client_side_credentials": True},
+                llm_router=None,
+                model="nvidia_riva/parakeet",
+            )
+            is True
+        )
+
+
+class TestIsRequestBodySafeBlocksRivaUseSslDowngrade:
+    """``use_ssl`` is the NVIDIA Riva audio-transcription handler's TLS toggle.
+    A caller-supplied ``use_ssl=False`` downgrades the gRPC channel that
+    carries the admin's ``nvapi-*`` bearer (attached as ``authorization``
+    metadata in ``_construct_auth``), exposing the token to an on-path
+    observer for any pinned endpoint that also accepts cleartext."""
+
+    def test_use_ssl_in_request_body_is_rejected(self):
+        with pytest.raises(ValueError, match="use_ssl"):
+            is_request_body_safe(
+                request_body={
+                    "model": "nvidia_riva/parakeet",
+                    "use_ssl": False,
+                },
+                general_settings={},
+                llm_router=None,
+                model="nvidia_riva/parakeet",
+            )
+
+    def test_admin_opt_in_proxy_wide_allows_use_ssl(self):
+        assert (
+            is_request_body_safe(
+                request_body={
+                    "model": "nvidia_riva/parakeet",
+                    "use_ssl": True,
+                },
+                general_settings={"allow_client_side_credentials": True},
+                llm_router=None,
+                model="nvidia_riva/parakeet",
+            )
+            is True
+        )
+
+
 # ── is_request_body_safe nested-config recursion (VERIA-6) ────────────────────
 
 
@@ -1746,6 +1847,22 @@ class TestIsRequestBodySafeNestedConfig:
                 general_settings={},
                 llm_router=None,
                 model="milvus-store",
+            )
+
+    def test_nested_nvcf_function_id_in_metadata_blocked(self):
+        """Smuggling ``nvcf_function_id`` via ``metadata`` / ``extra_body``
+        is the same shape as the VERIA-6 ``api_base`` bypass — must be
+        rejected by the recursive walk so the NVCF override gate cannot
+        be sidestepped with nesting."""
+        with pytest.raises(ValueError, match="nvcf_function_id"):
+            is_request_body_safe(
+                request_body={
+                    "model": "nvidia_riva/parakeet",
+                    "litellm_metadata": {"nvcf_function_id": "attacker-via-metadata"},
+                },
+                general_settings={},
+                llm_router=None,
+                model="nvidia_riva/parakeet",
             )
 
     def test_nested_langfuse_host_in_embedding_config_blocked(self):

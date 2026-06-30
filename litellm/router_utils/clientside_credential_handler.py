@@ -52,6 +52,18 @@ def _admin_config_fields_to_clear_on_base_override() -> List[str]:
         "oci_tenancy",
         "oci_key",
         "oci_key_file",
+        # NVIDIA Riva NVCF function selector — consumed by
+        # ``litellm/llms/nvidia_riva/audio_transcription/handler.py`` via
+        # optional_params and not declared on CredentialLiteLLMParams.
+        # Pins the admin-sanctioned NVCF function on the deployment; if
+        # the caller redirects ``api_base`` to a self-hosted Riva (BYOK),
+        # the admin's pinned function-id must not flow through.
+        "nvcf_function_id",
+        # NVIDIA Riva TLS toggle — same passthrough as
+        # ``nvcf_function_id``. The admin's pinned ``use_ssl`` choice was
+        # made for the original endpoint; on a caller-redirected
+        # ``api_base`` it must not carry over.
+        "use_ssl",
     ]
     return typed_fields + kwargs_only_fields
 
