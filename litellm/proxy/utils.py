@@ -5464,16 +5464,24 @@ async def _monitor_spend_logs_queue(
             await asyncio.sleep(current_interval)
 
 
-def _strip_null_bytes(value: object) -> object:
-    match value:
-        case str():
-            return value.replace("\x00", "")
-        case dict():
-            return {k: _strip_null_bytes(v) for k, v in value.items()}
-        case list():
-            return [_strip_null_bytes(item) for item in value]
-        case _:
-            return value
+def _strip_null_bytes_from_value(v: object) -> object:
+    if isinstance(v, str):
+        return v.replace("\x00", "")
+    if isinstance(v, dict):
+        return {dk: dv.replace("\x00", "") if isinstance(dv, str) else dv for dk, dv in v.items()}
+    if isinstance(v, list):
+        return [item.replace("\x00", "") if isinstance(item, str) else item for item in v]
+    return v
+
+
+def _strip_null_bytes(payload: object) -> object:
+    if isinstance(payload, str):
+        return payload.replace("\x00", "")
+    if isinstance(payload, dict):
+        return {k: _strip_null_bytes_from_value(v) for k, v in payload.items()}
+    if isinstance(payload, list):
+        return [_strip_null_bytes_from_value(item) for item in payload]
+    return payload
 
 
 def _raise_failed_update_spend_exception(e: Exception, start_time: float, proxy_logging_obj: ProxyLogging):
