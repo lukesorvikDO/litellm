@@ -136,15 +136,16 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                             "content_block": initial_block,
                         }
                     )
-                    processed_first = (
-                        LiteLLMAnthropicMessagesAdapter().translate_streaming_openai_response_to_anthropic(
-                            response=first_chunk,
-                            current_content_block_index=self.current_content_block_index,
-                        )
+                    processed_first = LiteLLMAnthropicMessagesAdapter().translate_streaming_openai_response_to_anthropic(
+                        response=first_chunk,
+                        current_content_block_index=self.current_content_block_index,
                     )
                     # Empty / stop-only first chunk: close the block before the
                     # terminal message_delta so the sequence stays spec-compliant.
-                    if isinstance(processed_first, dict) and processed_first.get("type") == "message_delta":
+                    if (
+                        isinstance(processed_first, dict)
+                        and processed_first.get("type") == "message_delta"
+                    ):
                         self.chunk_queue.append(
                             {
                                 "type": "content_block_stop",
@@ -198,7 +199,10 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                     self.sent_content_block_finish = False
                     return self.chunk_queue.popleft()
 
-                if processed_chunk["type"] == "message_delta" and self.sent_content_block_finish is False:
+                if (
+                    processed_chunk["type"] == "message_delta"
+                    and self.sent_content_block_finish is False
+                ):
                     # Queue both the content_block_stop and the message_delta
                     self.chunk_queue.append(
                         {
@@ -239,7 +243,9 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                 return {"type": "message_stop"}
             raise StopIteration
         except Exception as e:
-            verbose_logger.error("Anthropic Adapter - {}\n{}".format(e, traceback.format_exc()))
+            verbose_logger.error(
+                "Anthropic Adapter - {}\n{}".format(e, traceback.format_exc())
+            )
             raise StopAsyncIteration
 
     async def __anext__(self):  # noqa: PLR0915
@@ -300,13 +306,14 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                             "content_block": initial_block,
                         }
                     )
-                    processed_first = (
-                        LiteLLMAnthropicMessagesAdapter().translate_streaming_openai_response_to_anthropic(
-                            response=first_chunk,
-                            current_content_block_index=self.current_content_block_index,
-                        )
+                    processed_first = LiteLLMAnthropicMessagesAdapter().translate_streaming_openai_response_to_anthropic(
+                        response=first_chunk,
+                        current_content_block_index=self.current_content_block_index,
                     )
-                    if isinstance(processed_first, dict) and processed_first.get("type") == "message_delta":
+                    if (
+                        isinstance(processed_first, dict)
+                        and processed_first.get("type") == "message_delta"
+                    ):
                         self.chunk_queue.append(
                             {
                                 "type": "content_block_stop",
@@ -342,7 +349,10 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                 )
 
                 # Check if this is a usage chunk and we have a held stop_reason chunk
-                if self.holding_stop_reason_chunk is not None and getattr(chunk, "usage", None) is not None:
+                if (
+                    self.holding_stop_reason_chunk is not None
+                    and getattr(chunk, "usage", None) is not None
+                ):
                     # Merge usage into the held stop_reason chunk
                     merged_chunk = self.holding_stop_reason_chunk.copy()
                     if "delta" not in merged_chunk:
@@ -350,8 +360,16 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
 
                     # Add usage to the held chunk
                     uncached_input_tokens = chunk.usage.prompt_tokens or 0
-                    if hasattr(chunk.usage, "prompt_tokens_details") and chunk.usage.prompt_tokens_details:
-                        cached_tokens = getattr(chunk.usage.prompt_tokens_details, "cached_tokens", 0) or 0
+                    if (
+                        hasattr(chunk.usage, "prompt_tokens_details")
+                        and chunk.usage.prompt_tokens_details
+                    ):
+                        cached_tokens = (
+                            getattr(
+                                chunk.usage.prompt_tokens_details, "cached_tokens", 0
+                            )
+                            or 0
+                        )
                         uncached_input_tokens -= cached_tokens
 
                     usage_dict: UsageDelta = {
@@ -363,9 +381,16 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                         hasattr(chunk.usage, "_cache_creation_input_tokens")
                         and chunk.usage._cache_creation_input_tokens > 0
                     ):
-                        usage_dict["cache_creation_input_tokens"] = chunk.usage._cache_creation_input_tokens
-                    if hasattr(chunk.usage, "_cache_read_input_tokens") and chunk.usage._cache_read_input_tokens > 0:
-                        usage_dict["cache_read_input_tokens"] = chunk.usage._cache_read_input_tokens
+                        usage_dict["cache_creation_input_tokens"] = (
+                            chunk.usage._cache_creation_input_tokens
+                        )
+                    if (
+                        hasattr(chunk.usage, "_cache_read_input_tokens")
+                        and chunk.usage._cache_read_input_tokens > 0
+                    ):
+                        usage_dict["cache_read_input_tokens"] = (
+                            chunk.usage._cache_read_input_tokens
+                        )
                     merged_chunk["usage"] = usage_dict
 
                     # Queue the merged chunk and reset
@@ -400,7 +425,10 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                         # Return the first queued item
                         return self.chunk_queue.popleft()
 
-                    if processed_chunk["type"] == "message_delta" and self.sent_content_block_finish is False:
+                    if (
+                        processed_chunk["type"] == "message_delta"
+                        and self.sent_content_block_finish is False
+                    ):
                         # Queue both the content_block_stop and the holding chunk
                         self.chunk_queue.append(
                             {
@@ -409,7 +437,10 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                             }
                         )
                         self.sent_content_block_finish = True
-                        if processed_chunk.get("delta", {}).get("stop_reason") is not None:
+                        if (
+                            processed_chunk.get("delta", {}).get("stop_reason")
+                            is not None
+                        ):
                             self.holding_stop_reason_chunk = processed_chunk
                         else:
                             self.chunk_queue.append(processed_chunk)
@@ -557,7 +588,9 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
 
             if tool_block.get("name"):
                 truncated_name = tool_block["name"]
-                original_name = self.tool_name_mapping.get(truncated_name, truncated_name)
+                original_name = self.tool_name_mapping.get(
+                    truncated_name, truncated_name
+                )
                 tool_block["name"] = original_name
 
         if block_type != self.current_content_block_type:
